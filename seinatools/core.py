@@ -345,12 +345,18 @@ class SeinaTools(BaseCog):  # type: ignore
 
             try:
                 driver.get(url)
+
+                # Accept all cookies by executing JavaScript
+                driver.execute_script("document.cookie = 'cookieconsent_status=allow';")
+
                 # Set zoom level to 100%
                 driver.execute_script("document.body.style.zoom='100%'")
+
                 # Get the site name from the page title
                 site_name = driver.title
                 screenshot = driver.get_screenshot_as_png()
             finally:
+                driver.delete_all_cookies()
                 driver.quit()
 
             file_ = io.BytesIO(screenshot)
