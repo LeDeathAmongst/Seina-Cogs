@@ -328,7 +328,7 @@ class SeinaTools(BaseCog):  # type: ignore
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
 
-        async with ctx.typing():
+        def take_screenshot():
             chrome_options = Options()
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("--no-sandbox")
@@ -342,25 +342,27 @@ class SeinaTools(BaseCog):  # type: ignore
             chrome_options.add_argument("--disable-browser-side-navigation")
             chrome_options.add_argument("--disable-dev-shm-usage")
 
-            # Automatically set up the WebDriver
-            driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
+            driver = webdriver.Chrome(
+                service=ChromeService(ChromeDriverManager().install()), options=chrome_options
+            )
 
             try:
                 driver.get(url)
 
-                # Common selectors for cookie consent buttons
+                # Attempt to click cookie consent buttons
                 cookie_selectors = [
-                    "button[aria-label='Accept all']",  # Common pattern
-                    "button[title='Accept all']",  # Common pattern
-                    "#cookie-accept-button",  # Example ID
-                    ".cookie-consent-accept",  # Example class
-                    "[data-testid='cookie-accept']",  # Example data-testid
+                    "button[aria-label='Accept all']",
+                    "button[title='Accept all']",
+                    "#cookie-accept-button",
+                    ".cookie-consent-accept",
+                    "[data-testid='cookie-accept']",
                 ]
 
-                # Attempt to click cookie consent buttons
                 for selector in cookie_selectors:
                     try:
-                        WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector))).click()
+                        WebDriverWait(driver, 10).until(
+                            EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                        ).click()
                         break
                     except Exception:
                         continue
@@ -375,14 +377,19 @@ class SeinaTools(BaseCog):  # type: ignore
                 driver.delete_all_cookies()
                 driver.quit()
 
+            return site_name, screenshot
+
+        async with ctx.typing():
+            loop = self.bot.loop
+            site_name, screenshot = await loop.run_in_executor(None, take_screenshot)
+
             file_ = io.BytesIO(screenshot)
             file_.seek(0)
             file = discord.File(file_, "screenshot.png")
             file_.close()
 
             embed = discord.Embed(
-                description=f"[*{site_name}*]({url})",
-                color=discord.Color.blue()
+                description=f"[*{site_name}*]({url})", color=discord.Color.blue()
             )
             embed.set_image(url="attachment://screenshot.png")
 
