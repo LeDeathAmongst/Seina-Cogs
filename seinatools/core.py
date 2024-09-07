@@ -29,10 +29,14 @@ import json
 import logging
 from datetime import datetime
 from typing import Any, Dict, Final, List, Literal, Mapping, Optional, Union
+from urllib.parse import urlparse
 
 import aiohttp
 import discord
-from playwright.async_api import async_playwright
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 from redbot.core import Config, commands
 from redbot.core.bot import Red
 from redbot.core.i18n import Translator, cog_i18n
@@ -312,48 +316,42 @@ class SeinaTools(BaseCog):  # type: ignore
         return await ctx.tick()
 
     @commands.is_owner()
-    @commands.bot_has_permissions(attach_files=True)
-    @commands.command(
-        name="screenshot", aliases=["ss"]
-    )  # https://discord.com/channels/133049272517001216/133251234164375552/941197661426565150
-    async def _screenshot(self, ctx: commands.Context, url: str, wait: Optional[int] = None):
+    @commands.bot_has_permissions(embed_links=True, attach_files=True)
+    @commands.command(name="screenshot", aliases=["ss"])
+    async def _screenshot(self, ctx: commands.Context, url: str):
         """
-        Screenshots a given url directly inside discord.
+        Screenshots a given URL directly inside Discord.
         """
         async with ctx.typing():
-            async with async_playwright() as playwright:
-                browser = await playwright.chromium.launch(channel="chrome")
+            chrome_options = Options()
+            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
 
-                page = await browser.new_page(
-                    color_scheme="dark",
-                    screen={
-                        "width": 1920,
-                        "height": 1080,
-                    },
-                    viewport={
-                        "width": 1920,
-                        "height": 1080,
-                    },
-                )
+            # Automatically set up the WebDriver
+            driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
 
-                try:
-                    await page.goto(url)
-                except Exception as e:
-                    log.exception(
-                        f"Something went wrong trying to fetch the url: {box(str(e), lang='py')}"
-                    )
+            try:
+                driver.get(url)
+                screenshot = driver.get_screenshot_as_png()
+                parsed_url = urlparse(url)
+                site_name = parsed_url.netloc
+            finally:
+                driver.quit()
 
-                if wait != None:
-                    await page.wait_for_timeout(wait)
+            file_ = io.BytesIO(screenshot)
+            file_.seek(0)
+            file = discord.File(file_, "screenshot.png")
+            file_.close()
 
-                img_bytes = await page.screenshot()
+            embed = discord.Embed(
+                title=f"[{site_name}]({url})",
+                description="Here is the screenshot you requested.",
+                color=discord.Color.blue()
+            )
+            embed.set_image(url="attachment://screenshot.png")
 
-                file_ = io.BytesIO(img_bytes)
-                file_.seek(0)
-                file = discord.File(file_, "screenshot.png")
-                file_.close()
-
-        await ctx.send(file=file)
+            await ctx.send(embed=embed, file=file)
 
     @commands.is_owner()
     @commands.group(
@@ -578,7 +576,7 @@ class SeinaTools(BaseCog):  # type: ignore
             )
         embed.add_field(
             name="Project URLs",
-            value=f"• **{foj['homepage']}**\n• **{foj['repository']}**\n• **{foj['documentation']}**",
+            value=f" **{foj['homepage']}**\n **{foj['repository']}**\n **{foj['documentation']}**",
             inline=False,
         )
         created_at = datetime.strptime(foj["created_at"][:-9], "%Y-%m-%dT%H:%M:%S.%f")
@@ -665,7 +663,7 @@ class SeinaTools(BaseCog):  # type: ignore
         links.append(f'{"https://npmjs.com/packages/" + resp["_id"]}')
         embed.add_field(
             name="Links",
-            value="\n".join([f"• {key}" for key in links]),
+            value="\n".join([f" {key}" for key in links]),
             inline=False,
         )
         if resp.get("license"):
@@ -753,7 +751,7 @@ class SeinaTools(BaseCog):  # type: ignore
         )
         embed.add_field(
             name="Links",
-            value=f"• {resp['homepage_uri']}\n• {resp['source_code_uri']}\n• {resp['documentation_uri']}\n• {resp['project_uri']}",
+            value=f" {resp['homepage_uri']}\n {resp['source_code_uri']}\n {resp['documentation_uri']}\n {resp['project_uri']}",
             inline=False,
         )
         if not resp["dependencies"]["runtime"] is None:
