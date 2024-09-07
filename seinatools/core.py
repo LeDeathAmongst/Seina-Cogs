@@ -29,13 +29,15 @@ import json
 import logging
 from datetime import datetime
 from typing import Any, Dict, Final, List, Literal, Mapping, Optional, Union
-from urllib.parse import urlparse
 
 import aiohttp
 import discord
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from redbot.core import Config, commands
 from redbot.core.bot import Red
@@ -346,8 +348,22 @@ class SeinaTools(BaseCog):  # type: ignore
             try:
                 driver.get(url)
 
-                # Accept all cookies by executing JavaScript
-                driver.execute_script("document.cookie = 'cookieconsent_status=allow';")
+                # Common selectors for cookie consent buttons
+                cookie_selectors = [
+                    "button[aria-label='Accept all']",  # Common pattern
+                    "button[title='Accept all']",  # Common pattern
+                    "#cookie-accept-button",  # Example ID
+                    ".cookie-consent-accept",  # Example class
+                    "[data-testid='cookie-accept']",  # Example data-testid
+                ]
+
+                # Attempt to click cookie consent buttons
+                for selector in cookie_selectors:
+                    try:
+                        WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector))).click()
+                        break
+                    except Exception:
+                        continue
 
                 # Set zoom level to 100%
                 driver.execute_script("document.body.style.zoom='100%'")
