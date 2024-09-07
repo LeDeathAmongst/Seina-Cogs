@@ -317,7 +317,6 @@ class SeinaTools(BaseCog):  # type: ignore
         await self.config.embed.set(true_or_false)
         return await ctx.tick()
 
-    @commands.is_owner()
     @commands.bot_has_permissions(embed_links=True, attach_files=True)
     @commands.command(name="screenshot", aliases=["ss"])
     async def _screenshot(self, ctx: commands.Context, url: str):
@@ -328,7 +327,7 @@ class SeinaTools(BaseCog):  # type: ignore
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
 
-        def take_screenshot():
+        async with ctx.typing():
             chrome_options = Options()
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("--no-sandbox")
@@ -337,10 +336,6 @@ class SeinaTools(BaseCog):  # type: ignore
             chrome_options.add_argument("--disable-extensions")
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--window-size=1920,1080")
-            chrome_options.add_argument("start-maximized")
-            chrome_options.add_argument("disable-infobars")
-            chrome_options.add_argument("--disable-browser-side-navigation")
-            chrome_options.add_argument("--disable-dev-shm-usage")
 
             driver = webdriver.Chrome(
                 service=ChromeService(ChromeDriverManager().install()), options=chrome_options
@@ -349,23 +344,48 @@ class SeinaTools(BaseCog):  # type: ignore
             try:
                 driver.get(url)
 
-                # Attempt to click cookie consent buttons
+                # Attempt to set cookies and local storage directly
+                driver.execute_script("""
+                    try {
+                        // Set generic cookie consent
+                        document.cookie = 'cookieconsent_status=allow; path=/; domain=' + document.domain;
+
+                        // Set local storage for cookie consent
+                        localStorage.setItem('cookieconsent_status', 'allow');
+
+                        // Additional example for Google
+                        if (document.domain.includes('google')) {
+                            document.cookie = 'CONSENT=YES+cb; path=/; domain=.google.com';
+                        }
+                    } catch (e) {
+                        console.error('Error setting cookies:', e);
+                    }
+                """)
+
+                # Attempt to click common cookie consent buttons
                 cookie_selectors = [
                     "button[aria-label='Accept all']",
                     "button[title='Accept all']",
                     "#cookie-accept-button",
                     ".cookie-consent-accept",
                     "[data-testid='cookie-accept']",
+                    "[id^='accept']",
+                    "[class*='accept']",
+                    "button:contains('Accept')",
+                    "button:contains('I agree')",
                 ]
 
                 for selector in cookie_selectors:
                     try:
-                        WebDriverWait(driver, 10).until(
+                        WebDriverWait(driver, 5).until(
                             EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
                         ).click()
                         break
-                    except Exception:
-                        continue
+                    except Exception as e:
+                        log.debug(f"Selector {selector} not found or clickable: {e}")
+
+                # Refresh the page to apply changes
+                driver.refresh()
 
                 # Set zoom level to 100%
                 driver.execute_script("document.body.style.zoom='100%'")
@@ -373,15 +393,12 @@ class SeinaTools(BaseCog):  # type: ignore
                 # Get the site name from the page title
                 site_name = driver.title
                 screenshot = driver.get_screenshot_as_png()
+            except Exception as e:
+                log.error(f"Error during screenshot: {e}")
+                await ctx.send("An error occurred while taking the screenshot.")
+                return
             finally:
-                driver.delete_all_cookies()
                 driver.quit()
-
-            return site_name, screenshot
-
-        async with ctx.typing():
-            loop = self.bot.loop
-            site_name, screenshot = await loop.run_in_executor(None, take_screenshot)
 
             file_ = io.BytesIO(screenshot)
             file_.seek(0)
