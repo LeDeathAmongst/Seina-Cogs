@@ -322,10 +322,22 @@ class SeinaTools(BaseCog):  # type: ignore
         """
         Screenshots a given URL directly inside Discord.
         """
+        # Prepend 'https://' if not present
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+
         async with ctx.typing():
             chrome_options = Options()
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-infobars")
+            chrome_options.add_argument("--disable-extensions")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--window-size=1920,1080")
+            chrome_options.add_argument("start-maximized")
+            chrome_options.add_argument("disable-infobars")
+            chrome_options.add_argument("--disable-browser-side-navigation")
             chrome_options.add_argument("--disable-dev-shm-usage")
 
             # Automatically set up the WebDriver
@@ -333,9 +345,11 @@ class SeinaTools(BaseCog):  # type: ignore
 
             try:
                 driver.get(url)
+                # Set zoom level to 100%
+                driver.execute_script("document.body.style.zoom='100%'")
+                # Get the site name from the page title
+                site_name = driver.title
                 screenshot = driver.get_screenshot_as_png()
-                parsed_url = urlparse(url)
-                site_name = parsed_url.netloc
             finally:
                 driver.quit()
 
@@ -345,8 +359,7 @@ class SeinaTools(BaseCog):  # type: ignore
             file_.close()
 
             embed = discord.Embed(
-                title=f"[{site_name}]({url})",
-                description="Here is the screenshot you requested.",
+                description=f"[*{site_name}*]({url})",
                 color=discord.Color.blue()
             )
             embed.set_image(url="attachment://screenshot.png")
